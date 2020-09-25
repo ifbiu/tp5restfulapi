@@ -1,180 +1,260 @@
-![](https://box.kancloud.cn/5a0aaa69a5ff42657b5c4715f3d49221) 
-
-ThinkPHP 5.1（LTS版本） —— 12载初心，你值得信赖的PHP框架
-===============
-
-[![Scrutinizer Code Quality](https://scrutinizer-ci.com/g/top-think/framework/badges/quality-score.png?b=5.1)](https://scrutinizer-ci.com/g/top-think/framework/?branch=5.1)
-[![Build Status](https://travis-ci.org/top-think/framework.svg?branch=master)](https://travis-ci.org/top-think/framework)
-[![Total Downloads](https://poser.pugx.org/topthink/framework/downloads)](https://packagist.org/packages/topthink/framework)
-[![Latest Stable Version](https://poser.pugx.org/topthink/framework/v/stable)](https://packagist.org/packages/topthink/framework)
-[![PHP Version](https://img.shields.io/badge/php-%3E%3D5.6-8892BF.svg)](http://www.php.net/)
-[![License](https://poser.pugx.org/topthink/framework/license)](https://packagist.org/packages/topthink/framework)
-
-ThinkPHP5.1对底层架构做了进一步的改进，减少依赖，其主要特性包括：
-
- + 采用容器统一管理对象
- + 支持Facade
- + 注解路由支持
- + 路由跨域请求支持
- + 配置和路由目录独立
- + 取消系统常量
- + 助手函数增强
- + 类库别名机制
- + 增加条件查询
- + 改进查询机制
- + 配置采用二级
- + 依赖注入完善
- + 支持`PSR-3`日志规范
- + 中间件支持（V5.1.6+）
- + Swoole/Workerman支持（V5.1.18+）
 
 
-> ThinkPHP5的运行环境要求PHP5.6以上。
+详细见[毫小秋的博客-ThinkPHP5实现RESTfulAPI](https://ifbiu.com/article38/)
 
-## 安装
+# 使用方法
 
-使用composer安装
+首先配置httpd-vhosts-conf文件和本地hosts
 
-~~~
-composer create-project topthink/think tp
-~~~
+我的本地文件目录在F:/www/demo/tp5restfulapi
 
-启动服务
+```
+<VirtualHost *:80>
+  ServerName tp5restfulapi.com
+  DocumentRoot "F:/www/demo/tp5restfulapi/public"
+ <Directory "F:/www/demo/tp5restfulapi/public">
+  </Directory>
+</VirtualHost>
+```
 
-~~~
-cd tp
-php think run
-~~~
+## 1、增加路由解析
 
-然后就可以在浏览器中访问
+在application\route.php追加
 
-~~~
-http://localhost:8000
-~~~
+```php
+Route::resource('users','api/User');   //注册一个资源路由，对应restful各个方法
+```
 
-更新框架
-~~~
-composer update topthink/framework
-~~~
+## 2、构建数据表
+
+创建数据库
+
+```mysql
+CREATE DATABASE tp5restfulapi;
+```
+
+创建user表
+
+```mysql
+use tp5restfulapi;
+CREATE TABLE `user`  (
+  `id` int(4) NOT NULL AUTO_INCREMENT COMMENT '主键id，自增长',
+  `mobile` varchar(255) CHARACTER SET utf8 COLLATE utf8_general_ci NOT NULL COMMENT '手机号',
+  `name` varchar(255) CHARACTER SET utf8 COLLATE utf8_general_ci NOT NULL COMMENT '用户姓名',
+  `email` varchar(255) CHARACTER SET utf8 COLLATE utf8_general_ci NOT NULL COMMENT '用户邮箱',
+  `status` tinyint(4) NOT NULL COMMENT '用户状态',
+  `create_time` int(10) NOT NULL COMMENT '用户创建时间',
+  `update_time` int(10) NOT NULL COMMENT '用户更新时间',
+  PRIMARY KEY (`id`) USING BTREE
+) ENGINE = InnoDB DEFAULT CHARSET=utf8;
+```
+
+![](https://candide.oss-cn-beijing.aliyuncs.com/ifbiu/20200925165831.png)
+
+配置好database.php数据库信息
+
+![](https://candide.oss-cn-beijing.aliyuncs.com/ifbiu/1601024563302-20200925170229.png)
+
+## 3、构建验证器
+
+在application\api\controller下新建Api.php
+
+```php
+<?php
+
+namespace app\api\controller;
+
+use think\Controller;
+use think\Request;
+
+class Api extends Controller
+{
+
+   // 执行加密key
+   private $sign_key = 'thinkphp5';
+
+   // 请求对象
+   protected $request;
+
+   // 默认接口的有效期为60秒
+   protected $timeout_second = 60;
 
 
-## 在线手册
+   // 获取系统时间
+   public function getSysTime()
+   {
+      return $this->return_msg(200, '', ['time' => time()]);
+   }
 
-+ [完全开发手册](https://www.kancloud.cn/manual/thinkphp5_1/content)
-+ [升级指导](https://www.kancloud.cn/manual/thinkphp5_1/354155) 
+   // 初始化方法
+   public function _initialize()
+   {
+      parent::_initialize();
+      // 实例化请求对象
+      $this->request = Request::instance();
+      // 是否开启API权限验证（方便测试）
+      if (config('api_auth')) {
+         // 验证时间戳是否超时
+         $this->check_time($this->request->only(['time']));
+         // 验证签名是否正确
+         $this->check_sign($this->request->param());
+      }
+   }
 
-## 目录结构
 
-初始的目录结构如下：
+   // 验证请求签名是否正确
 
-~~~
-www  WEB部署目录（或者子目录）
-├─application           应用目录
-│  ├─common             公共模块目录（可以更改）
-│  ├─module_name        模块目录
-│  │  ├─common.php      模块函数文件
-│  │  ├─controller      控制器目录
-│  │  ├─model           模型目录
-│  │  ├─view            视图目录
-│  │  └─ ...            更多类库目录
-│  │
-│  ├─command.php        命令行定义文件
-│  ├─common.php         公共函数文件
-│  └─tags.php           应用行为扩展定义文件
-│
-├─config                应用配置目录
-│  ├─module_name        模块配置目录
-│  │  ├─database.php    数据库配置
-│  │  ├─cache           缓存配置
-│  │  └─ ...            
-│  │
-│  ├─app.php            应用配置
-│  ├─cache.php          缓存配置
-│  ├─cookie.php         Cookie配置
-│  ├─database.php       数据库配置
-│  ├─log.php            日志配置
-│  ├─session.php        Session配置
-│  ├─template.php       模板引擎配置
-│  └─trace.php          Trace配置
-│
-├─route                 路由定义目录
-│  ├─route.php          路由定义
-│  └─...                更多
-│
-├─public                WEB目录（对外访问目录）
-│  ├─index.php          入口文件
-│  ├─router.php         快速测试文件
-│  └─.htaccess          用于apache的重写
-│
-├─thinkphp              框架系统目录
-│  ├─lang               语言文件目录
-│  ├─library            框架类库目录
-│  │  ├─think           Think类库包目录
-│  │  └─traits          系统Trait目录
-│  │
-│  ├─tpl                系统模板目录
-│  ├─base.php           基础定义文件
-│  ├─console.php        控制台入口文件
-│  ├─convention.php     框架惯例配置文件
-│  ├─helper.php         助手函数文件
-│  ├─phpunit.xml        phpunit配置文件
-│  └─start.php          框架入口文件
-│
-├─extend                扩展类库目录
-├─runtime               应用的运行时目录（可写，可定制）
-├─vendor                第三方类库目录（Composer依赖库）
-├─build.php             自动生成定义文件（参考）
-├─composer.json         composer 定义文件
-├─LICENSE.txt           授权说明文件
-├─README.md             README 文件
-├─think                 命令行入口文件
-~~~
+   public function check_sign($param)
+   {
+      if (!isset($param['sign']) || !$param['sign']) {
+         $this->return_msg(400, '签名不能为空!');
+      }
+      if ($param['sign'] !== $this->buildSign($param)) {
+         $this->return_msg(400, '签名错误!');
+      }
+   }
 
-> 可以使用php自带webserver快速测试
-> 切换到根目录后，启动命令：php think run
 
-## 命名规范
+   // 检测接口是否超时
+   public function check_time($arr)
+   {
+      if (!isset($arr['time']) || intval($arr['time']) <= 1) {
+         $this->return_msg(400, '时间戳错误!');
+      }
+      if (time() - intval($arr['time']) > $this->timeout_second) {
+         $this->return_msg(400, '请求超时!');
+      }
+   }
 
-`ThinkPHP5`遵循PSR-2命名规范和PSR-4自动加载规范，并且注意如下规范：
 
-### 目录和文件
+   // 构建请求签名
+   public function buildSign($param)
+   {
+      unset($param['sign']);                  // sign字段不需要加入签名算法
+      unset($param['time']);
+      ksort($param);                          // 键值对的key按照升序排序
+      $str = implode('', $param);         // 请求参数值拼接成字符串
+      $sign = md5(md5($str) . $this->sign_key); // 执行加密
+      return $sign;
+   }
 
-*   目录不强制规范，驼峰和小写+下划线模式均支持；
-*   类库、函数文件统一以`.php`为后缀；
-*   类的文件名均以命名空间定义，并且命名空间的路径和类库文件所在路径一致；
-*   类名和类文件名保持一致，统一采用驼峰法命名（首字母大写）；
+   // 数据返回
+   public function return_msg($code = '200', $message = '', $data = [])
+   {
+      header('Content-Type: application/json');   // 设置返回类型
+      http_response_code($code);                      // 设置返回头部
+      $return['code'] = $code;
+      $return['message'] = $message;
+      if (!empty($data)) {
+         $return['data'] = $data;
+      }
+      exit(json_encode($return, JSON_UNESCAPED_UNICODE));
+   }
+}
 
-### 函数和类、属性命名
+```
 
-*   类的命名采用驼峰法，并且首字母大写，例如 `User`、`UserType`，默认不需要添加后缀，例如`UserController`应该直接命名为`User`；
-*   函数的命名使用小写字母和下划线（小写字母开头）的方式，例如 `get_client_ip`；
-*   方法的命名使用驼峰法，并且首字母小写，例如 `getUserName`；
-*   属性的命名使用驼峰法，并且首字母小写，例如 `tableName`、`instance`；
-*   以双下划线“__”打头的函数或方法作为魔法方法，例如 `__call` 和 `__autoload`；
+## 4、构建模型
 
-### 常量和配置
+在application\api\model下新建User.php
 
-*   常量以大写字母和下划线命名，例如 `APP_PATH`和 `THINK_PATH`；
-*   配置参数以小写字母和下划线命名，例如 `url_route_on` 和`url_convert`；
+```php
+<?php
+namespace app\api\model;
 
-### 数据表和字段
+use think\Model;
 
-*   数据表和字段采用小写加下划线方式命名，并注意字段名不要以下划线开头，例如 `think_user` 表和 `user_name`字段，不建议使用驼峰和中文作为数据表字段命名。
+// 用户表自定义模型
+class User extends Model
+{
+   // 自动写入时间戳
+   protected $autoWriteTimestamp = true;
 
-## 参与开发
+   // 数据写入的时候，状态字段默认为1
+   protected $insert             = [
+      'status' => 1,
+   ];
+}
+```
 
-请参阅 [ThinkPHP5 核心框架包](https://github.com/top-think/framework)。
+## 5、构建控制器
 
-## 版权信息
+在application\api\controller下新建User.php
 
-ThinkPHP遵循Apache2开源协议发布，并提供免费使用。
+```php
+<?php
 
-本项目包含的第三方源码和二进制文件之版权信息另行标注。
+namespace app\api\controller;
 
-版权所有Copyright © 2006-2018 by ThinkPHP (http://thinkphp.cn)
+use app\api\model\User as UserModel;
+use think\Request;
 
-All rights reserved。
+class User extends Api
+{
+    //显示用户列表
+    public function index()
+    {
+        $list = UserModel::all();
+        return  $this->return_msg(200,'',$list);
+    }
+    //保护用户信息
+    public function save(Request $request)
+    {
+        $request = UserModel::create($request->param());
+        $this->return_msg(200,'',$request);
+    }
+    //根据ID获取用户信息
+    public function read($id)
+    {
+        //根据ID查询单条记录
+        $this->return_msg(200,'',UserModel::get($id));
+    }
+    //保存更新资源
+    public function update(Request $request,$id)
+    {
+        //根据ID和数据更新用户信息
+        $result = UserModel::update($request->param(),['id'=>$id]);
+        return $this->return_msg(200,'',$result);
+    }
+    //根据用户ID删除记录
+    public function delete($id)
+    {
+        //根据ID删除一条记录
+        return $this ->return_msg(200,'删除成功',UserModel::destroy($id));
+    }
+}
+```
 
-ThinkPHP® 商标和著作权所有者为上海顶想信息科技有限公司。
+## 6、测试接口
 
-更多细节参阅 [LICENSE.txt](LICENSE.txt)
+打开Postman测试接口
+
+### 1. 增
+
++ POST请求，需要填写请求参数
+
+![](https://candide.oss-cn-beijing.aliyuncs.com/ifbiu/1601025843472-20200925172344.png)
+
+### 2. 查
+
++ GET请求，直接访问，无需请求参数
+
+  + 获取所有信息
+
+  ![](https://candide.oss-cn-beijing.aliyuncs.com/ifbiu/1601026186680-20200925172935.png)
+
+  + 获取单个信息
+
+  ![](https://candide.oss-cn-beijing.aliyuncs.com/ifbiu/1601026388336-20200925173302.png)
+
+### 3. 改
+
++ PUT请求，无需请求参数
+
+![](https://candide.oss-cn-beijing.aliyuncs.com/ifbiu/1601026935977-20200925174203.png)
+
+### 4. 删
+
++ DELETE请求，无需请求参数
+
+![](https://candide.oss-cn-beijing.aliyuncs.com/ifbiu/1601027162591-20200925174554.png)
